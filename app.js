@@ -138,6 +138,7 @@ function initEventListeners() {
             state.transportMode = btn.dataset.mode;
             saveState();
             updateEstimates();
+            updateNavLinks();
             calculateResults();
         });
     });
@@ -374,9 +375,8 @@ function updateNavLinks() {
 }
 
 // ===== SUN CALCULATIONS =====
-function getSunTimeForAngle(lat, lng, targetAngle) {
-    const today = new Date();
-    const times = SunCalc.getTimes(today, lat, lng);
+function getSunTimeForAngle(lat, lng, targetAngle, date = new Date()) {
+    const times = SunCalc.getTimes(date, lat, lng);
 
     // For angle 0 (sunset)
     if (targetAngle === 0) {
@@ -430,9 +430,65 @@ function getSunTimeForAngle(lat, lng, targetAngle) {
     return times.sunset;
 }
 
+// Get sunrise time for angle (morning) - for next day display
+function getSunriseTimeForAngle(lat, lng, targetAngle, date = new Date()) {
+    const times = SunCalc.getTimes(date, lat, lng);
+
+    // For angle 0 (sunrise)
+    if (targetAngle === 0) {
+        return times.sunrise;
+    }
+
+    // For negative angles (before sunrise)
+    if (targetAngle === -6) {
+        return times.dawn; // Civil twilight start
+    }
+    if (targetAngle === -12) {
+        return times.nauticalDawn; // Nautical twilight start
+    }
+    if (targetAngle === -18) {
+        return times.nightEnd; // Astronomical twilight start
+    }
+
+    // For custom angles, interpolate
+    if (targetAngle < 0 && targetAngle > -6) {
+        // Between dawn and sunrise
+        const dawnTime = times.dawn.getTime();
+        const sunriseTime = times.sunrise.getTime();
+        const ratio = 1 - (targetAngle / -6);
+        return new Date(dawnTime + (sunriseTime - dawnTime) * ratio);
+    }
+    if (targetAngle <= -6 && targetAngle > -12) {
+        // Between nautical dawn and civil dawn
+        const nauticalTime = times.nauticalDawn.getTime();
+        const dawnTime = times.dawn.getTime();
+        const ratio = 1 - ((targetAngle + 6) / -6);
+        return new Date(nauticalTime + (dawnTime - nauticalTime) * ratio);
+    }
+    if (targetAngle <= -12 && targetAngle > -18) {
+        // Between night end and nautical dawn
+        const nightEndTime = times.nightEnd.getTime();
+        const nauticalTime = times.nauticalDawn.getTime();
+        const ratio = 1 - ((targetAngle + 12) / -6);
+        return new Date(nightEndTime + (nauticalTime - nightEndTime) * ratio);
+    }
+
+    // For positive angles (after sunrise)
+    if (targetAngle > 0) {
+        const sunriseTime = times.sunrise.getTime();
+        const goldenHourEnd = times.goldenHourEnd.getTime();
+        // Rough estimate: golden hour end is ~6° above horizon
+        const ratio = targetAngle / 6;
+        return new Date(sunriseTime + (goldenHourEnd - sunriseTime) * ratio);
+    }
+
+    return times.sunrise;
+}
+
 // ===== RESULTS CALCULATION =====
 function calculateResults() {
     const now = new Date();
+    const arrivalTimes = {};
 
     Object.keys(COURSES).forEach(key => {
         const course = COURSES[key];
@@ -453,31 +509,56 @@ function calculateResults() {
         // Calculate arrival time
         const arrivalEl = document.getElementById(`arrival-${key}`);
         const playtimeEl = document.getElementById(`playtime-${key}`);
-        const resultCard = document.querySelector(`.result-card[data-course="${key}"]`);
+        const nextDayEl = document.getElementById(`nextday-${key}`);
 
         if (travelTime === null) {
             arrivalEl.textContent = '--:--';
-            playtimeEl.textContent = 'Wybierz lokalizację';
+            playtimeEl.innerHTML = 'Wybierz lokalizację';
             playtimeEl.classList.remove('late');
+            if (nextDayEl) nextDayEl.style.display = 'none';
+            arrivalTimes[key] = null;
             return;
         }
 
         const totalTravelMinutes = state.prepTime + travelTime;
         const arrivalTime = new Date(now.getTime() + totalTravelMinutes * 60 * 1000);
         arrivalEl.textContent = formatTime(arrivalTime);
+        arrivalTimes[key] = arrivalTime;
 
         // Calculate playtime
         const playtimeMs = sunTime.getTime() - arrivalTime.getTime();
         const playtimeMinutes = Math.round(playtimeMs / 60000);
 
         if (playtimeMinutes > 0) {
-            playtimeEl.textContent = formatDuration(playtimeMinutes);
+            playtimeEl.innerHTML = formatDuration(playtimeMinutes);
             playtimeEl.classList.remove('late');
+            // Show "czasu na grę" label
+            playtimeEl.nextElementSibling.style.display = '';
+            if (nextDayEl) nextDayEl.style.display = 'none';
         } else {
-            playtimeEl.textContent = `Spóźnienie o ${formatDuration(Math.abs(playtimeMinutes))}`;
+            playtimeEl.innerHTML = `Za późno!<br><small>o ${formatDuration(Math.abs(playtimeMinutes))}</small>`;
             playtimeEl.classList.add('late');
+            // Hide "czasu na grę" label - doesn't make sense here
+            playtimeEl.nextElementSibling.style.display = 'none';
+
+            // Calculate tomorrow's sunrise time for the same angle
+            if (nextDayEl) {
+                const tomorrow = new Date(now);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const tomorrowSunrise = getSunriseTimeForAngle(course.lat, course.lng, state.sunAngle, tomorrow);
+
+                // Calculate how long the play window is tomorrow (sunrise to sunset at given angle)
+                const tomorrowSunset = getSunTimeForAngle(course.lat, course.lng, state.sunAngle, tomorrow);
+                const tomorrowPlayMinutes = Math.round((tomorrowSunset.getTime() - tomorrowSunrise.getTime()) / 60000);
+
+                nextDayEl.innerHTML = `🌅 Jutro od <strong>${formatTime(tomorrowSunrise)}</strong> (${formatDuration(tomorrowPlayMinutes)} gry)`;
+                nextDayEl.style.display = 'block';
+            }
         }
     });
+
+    // Update weather for arrival times
+    updateWeather(arrivalTimes);
 }
 
 // ===== FORMATTING =====
@@ -495,7 +576,7 @@ function formatDuration(minutes) {
     if (mins === 0) {
         return `${hours} godz.`;
     }
-    return `${hours} godz. ${mins} min`;
+    return `${hours}h ${mins}min`;
 }
 
 // ===== CLOCK =====
@@ -508,6 +589,236 @@ function startClock() {
 
     updateClock();
     setInterval(updateClock, 30000); // Update every 30 seconds
+}
+
+// ===== WEATHER =====
+let weatherCache = null;
+let weatherCacheTime = null;
+const WEATHER_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
+
+const WEATHER_CODES = {
+    0: { icon: '☀️', desc: 'Słonecznie' },
+    1: { icon: '🌤️', desc: 'Lekkie chmury' },
+    2: { icon: '⛅', desc: 'Częściowe zachmurzenie' },
+    3: { icon: '☁️', desc: 'Pochmurno' },
+    45: { icon: '🌫️', desc: 'Mgła' },
+    48: { icon: '🌫️', desc: 'Szron' },
+    51: { icon: '🌧️', desc: 'Lekka mżawka' },
+    53: { icon: '🌧️', desc: 'Mżawka' },
+    55: { icon: '🌧️', desc: 'Gęsta mżawka' },
+    61: { icon: '🌧️', desc: 'Lekki deszcz' },
+    63: { icon: '🌧️', desc: 'Deszcz' },
+    65: { icon: '🌧️', desc: 'Silny deszcz' },
+    71: { icon: '🌨️', desc: 'Lekki śnieg' },
+    73: { icon: '🌨️', desc: 'Śnieg' },
+    75: { icon: '🌨️', desc: 'Intensywny śnieg' },
+    80: { icon: '🌦️', desc: 'Przelotne opady' },
+    81: { icon: '🌦️', desc: 'Przelotne opady' },
+    82: { icon: '⛈️', desc: 'Silne opady' },
+    95: { icon: '⛈️', desc: 'Burza' },
+    96: { icon: '⛈️', desc: 'Burza z gradem' },
+    99: { icon: '⛈️', desc: 'Silna burza z gradem' }
+};
+
+async function fetchWeather() {
+    // Use Gdańsk center coordinates for weather (all courses are nearby)
+    const lat = 54.372;
+    const lng = 18.60;
+
+    // Check cache
+    if (weatherCache && weatherCacheTime && (Date.now() - weatherCacheTime < WEATHER_CACHE_DURATION)) {
+        return weatherCache;
+    }
+
+    try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,windgusts_10m,precipitation_probability,cloudcover&timezone=Europe%2FWarsaw&forecast_days=2`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        weatherCache = data;
+        weatherCacheTime = Date.now();
+        return data;
+    } catch (e) {
+        console.error('Weather fetch error:', e);
+        return null;
+    }
+}
+
+function getWeatherForTime(weatherData, targetTime) {
+    if (!weatherData || !weatherData.hourly) return null;
+
+    // API returns times in format "2026-01-11T21:00" (local timezone Europe/Warsaw)
+    // We need to match against target time in the same format
+    const year = targetTime.getFullYear();
+    const month = String(targetTime.getMonth() + 1).padStart(2, '0');
+    const day = String(targetTime.getDate()).padStart(2, '0');
+    const hour = String(targetTime.getHours()).padStart(2, '0');
+    const targetHourStr = `${year}-${month}-${day}T${hour}:00`;
+
+    let idx = weatherData.hourly.time.findIndex(t => t === targetHourStr);
+
+    if (idx === -1) {
+        // Find closest hour
+        const targetTs = targetTime.getTime();
+        let closestDiff = Infinity;
+        weatherData.hourly.time.forEach((t, i) => {
+            // Parse API time string as local time
+            const apiTime = new Date(t.replace('T', ' ').replace(/-/g, '/'));
+            const diff = Math.abs(apiTime.getTime() - targetTs);
+            if (diff < closestDiff) {
+                closestDiff = diff;
+                idx = i;
+            }
+        });
+    }
+
+    // Convert km/h to m/s (divide by 3.6)
+    const windMs = (weatherData.hourly.windspeed_10m[idx] / 3.6).toFixed(1);
+    const gustMs = (weatherData.hourly.windgusts_10m[idx] / 3.6).toFixed(1);
+
+    // Get the actual hour from API data for display
+    const actualHour = weatherData.hourly.time[idx];
+
+    return {
+        temp: Math.round(weatherData.hourly.temperature_2m[idx]),
+        code: weatherData.hourly.weathercode[idx],
+        wind: windMs,
+        gusts: gustMs,
+        precipitation: weatherData.hourly.precipitation_probability[idx],
+        clouds: weatherData.hourly.cloudcover[idx],
+        forecastHour: actualHour // Store the actual forecast hour
+    };
+}
+
+async function updateWeather(arrivalTimes) {
+    const weatherData = await fetchWeather();
+    const weatherContent = document.getElementById('weather-content');
+    const weatherCard = document.getElementById('weather-section');
+
+    if (!weatherData) {
+        weatherContent.innerHTML = '<p class="weather-loading">Nie udało się pobrać pogody</p>';
+        return;
+    }
+
+    // Use current time as baseline
+    const now = new Date();
+    let targetTime = now;
+
+    // Get valid future arrival times only
+    const validArrivals = Object.values(arrivalTimes).filter(t => t !== null && t > now);
+    if (validArrivals.length > 0) {
+        // Use the earliest future arrival time
+        targetTime = validArrivals.reduce((earliest, t) => t < earliest ? t : earliest);
+    }
+
+    const weather = getWeatherForTime(weatherData, targetTime);
+    if (!weather) {
+        weatherContent.innerHTML = '<p class="weather-loading">Brak danych pogodowych</p>';
+        return;
+    }
+
+    const weatherInfo = WEATHER_CODES[weather.code] || { icon: '❓', desc: 'Nieznana' };
+
+    // Determine weather status and alerts
+    let status = 'good';
+    let alerts = [];
+
+    // Check for bad conditions
+    const badWeatherCodes = [63, 65, 73, 75, 82, 95, 96, 99]; // Heavy rain, snow, storms
+    const warningWeatherCodes = [51, 53, 55, 61, 71, 80, 81]; // Light rain, snow, showers
+
+    if (badWeatherCodes.includes(weather.code)) {
+        status = 'bad';
+        alerts.push({ type: 'danger', text: `⚠️ ${weatherInfo.desc} - rozważ przełożenie gry!` });
+    } else if (warningWeatherCodes.includes(weather.code)) {
+        status = 'warning';
+        alerts.push({ type: 'warning', text: `⚡ ${weatherInfo.desc} - weź kurtkę!` });
+    }
+
+    // Check precipitation probability
+    if (weather.precipitation >= 70) {
+        status = 'bad';
+        alerts.push({ type: 'danger', text: `🌧️ ${weather.precipitation}% szans na opady - będzie mokro!` });
+    } else if (weather.precipitation >= 40) {
+        if (status === 'good') status = 'warning';
+        alerts.push({ type: 'warning', text: `🌧️ ${weather.precipitation}% szans na opady - weź kurtkę` });
+    }
+
+    // Check wind
+    const windMs = parseFloat(weather.wind);
+    const gustMs = parseFloat(weather.gusts);
+
+    if (gustMs >= 15) {
+        status = 'bad';
+        alerts.push({ type: 'danger', text: `💨 Porywy ${weather.gusts} m/s - dyski będą latać!` });
+    } else if (windMs >= 8 || gustMs >= 10) {
+        if (status === 'good') status = 'warning';
+        alerts.push({ type: 'warning', text: `💨 Silny wiatr - wybierz stabilne dyski` });
+    }
+
+    // Check temperature
+    if (weather.temp <= 0) {
+        if (status === 'good') status = 'warning';
+        alerts.push({ type: 'warning', text: `🥶 Mróz! Ubierz się ciepło` });
+    } else if (weather.temp >= 30) {
+        if (status === 'good') status = 'warning';
+        alerts.push({ type: 'warning', text: `🥵 Upał! Weź dużo wody` });
+    }
+
+    // Update card class
+    weatherCard.classList.remove('weather-good', 'weather-warning', 'weather-bad');
+    weatherCard.classList.add(`weather-${status}`);
+
+    // Build HTML
+    // Format the forecast hour (comes as "2026-01-11T21:00" format - local time)
+    // Extract just the hour part
+    const forecastTimeStr = weather.forecastHour.slice(11, 16); // "21:00"
+
+    const alertsHtml = alerts.map(a =>
+        `<div class="weather-alert alert-${a.type}">${a.text}</div>`
+    ).join('');
+
+    weatherContent.innerHTML = `
+        <div class="weather-grid">
+            <div class="weather-main-info">
+                <span class="weather-main-icon">${weatherInfo.icon}</span>
+                <span class="weather-main-temp">${weather.temp}°C</span>
+                <span class="weather-main-desc">${weatherInfo.desc}</span>
+            </div>
+            <div class="weather-details-grid">
+                <div class="weather-detail">
+                    <span class="weather-detail-icon">💨</span>
+                    <div>
+                        <div class="weather-detail-value">${weather.wind} m/s</div>
+                        <div class="weather-detail-label">wiatr</div>
+                    </div>
+                </div>
+                <div class="weather-detail">
+                    <span class="weather-detail-icon">🌬️</span>
+                    <div>
+                        <div class="weather-detail-value">${weather.gusts} m/s</div>
+                        <div class="weather-detail-label">porywy</div>
+                    </div>
+                </div>
+                <div class="weather-detail">
+                    <span class="weather-detail-icon">🌧️</span>
+                    <div>
+                        <div class="weather-detail-value">${weather.precipitation}%</div>
+                        <div class="weather-detail-label">szansa na opady</div>
+                    </div>
+                </div>
+                <div class="weather-detail">
+                    <span class="weather-detail-icon">☁️</span>
+                    <div>
+                        <div class="weather-detail-value">${weather.clouds}%</div>
+                        <div class="weather-detail-label">zachmurzenie</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        ${alertsHtml}
+        <p class="weather-time-note">Prognoza na godz. ${forecastTimeStr}</p>
+    `;
 }
 
 // ===== UI UPDATE =====
