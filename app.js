@@ -517,7 +517,7 @@ function updateUI() {
     document.getElementById('prep-time-slider').value = Math.max(0, Math.min(60, state.prepTime));
 
     document.getElementById('sun-angle').value = state.sunAngle;
-    document.getElementById('sun-angle-slider').value = Math.max(-18, Math.min(15, state.sunAngle));
+    document.getElementById('sun-angle-slider').value = Math.max(-12, Math.min(6, state.sunAngle));
 
     // Set active sun preset
     document.querySelectorAll('.preset-option').forEach(btn => {

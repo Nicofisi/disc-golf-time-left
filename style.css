@@ -299,14 +299,14 @@ header h1 {
 }
 
 .custom-angle {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
+    display: block;
+    margin-top: 0.5rem;
 }
 
-.custom-angle label {
+.custom-angle > label {
+    display: block;
     font-weight: normal;
+    margin-bottom: 0.25rem;
 }
 
 .hint {

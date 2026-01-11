@@ -32,11 +32,15 @@
             <h2>⏱️ Ustawienia</h2>
 
             <div class="setting-group">
-                <label for="prep-time">Czas na wyjście z domu:</label>
-                <div class="input-with-unit">
-                    <input type="number" id="prep-time" min="0" max="120" value="5">
-                    <span class="unit">minut</span>
+                <label for="prep-time">Czas przygotowania przed wyjściem:</label>
+                <div class="slider-input-group">
+                    <input type="range" id="prep-time-slider" min="0" max="60" value="5" step="1" class="slider" aria-label="Czas przygotowania">
+                    <div class="input-with-unit">
+                        <input type="number" id="prep-time" min="0" max="120" value="5">
+                        <span class="unit">min</span>
+                    </div>
                 </div>
+                <small class="hint">Ile czasu potrzebujesz, by się ogarnąć i wyjść z domu</small>
             </div>
 
             <div class="setting-group">
@@ -69,9 +73,12 @@
                 </div>
                 <div class="custom-angle">
                     <label for="sun-angle">Własny kąt:</label>
-                    <div class="input-with-unit">
-                        <input type="number" id="sun-angle" min="-18" max="10" value="0" step="1">
-                        <span class="unit">°</span>
+                    <div class="slider-input-group">
+                        <input type="range" id="sun-angle-slider" min="-12" max="6" value="0" step="1" class="slider" aria-label="Kąt słońca">
+                        <div class="input-with-unit">
+                            <input type="number" id="sun-angle" min="-18" max="10" value="0" step="1">
+                            <span class="unit">°</span>
+                        </div>
                     </div>
                     <small class="hint">0° = zachód, ujemne = po zachodzie</small>
                 </div>
@@ -239,9 +246,9 @@
         <footer>
             <p>Stworzone dla disc golferów z Gdańska 🥏</p>
             <p class="links">
-                <a href="https://www.openstreetmap.org/#map=19/54.372664/18.590667" target="_blank">Jaśkowa Dolina</a> |
-                <a href="https://www.openstreetmap.org/#map=19/54.408414/18.616033" target="_blank">Ronalda Reagana</a> |
-                <a href="https://www.openstreetmap.org/#map=19/54.346376/18.608766" target="_blank">Na Zboczu</a>
+                <a href="https://udisc.com/courses/jaskowa-disc-golf-sxjp" target="_blank">Jaśkowa Dolina</a> |
+                <a href="https://udisc.com/courses/disc-golf-w-parku-im-r-reagana-lno" target="_blank">Ronalda Reagana</a> |
+                <a href="https://udisc.com/courses/disc-golf-na-zboczu-vj0j" target="_blank">Na Zboczu</a>
             </p>
         </footer>
     </div>
