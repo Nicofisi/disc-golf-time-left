@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Czy zdążę na disc golfa? | Gdańsk</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🥏 Czy zdążę na disc golfa?</h1>
+            <p class="subtitle">Sprawdź ile czasu gry zostało przed zachodem słońca</p>
+        </header>
+
+        <!-- SEKCJA 1: Lokalizacja użytkownika -->
+        <section class="card" id="location-section">
+            <h2>📍 Twoja lokalizacja</h2>
+            <div class="location-controls">
+                <button id="geolocate-btn" class="btn btn-primary">
+                    <span class="btn-icon">📍</span> Zlokalizuj mnie
+                </button>
+                <span class="or-divider">lub kliknij na mapie</span>
+            </div>
+            <div id="map"></div>
+            <p class="location-info" id="location-info">Lokalizacja nie wybrana</p>
+        </section>
+
+        <!-- SEKCJA 2: Ustawienia czasu -->
+        <section class="card" id="time-settings">
+            <h2>⏱️ Ustawienia</h2>
+
+            <div class="setting-group">
+                <label for="prep-time">Czas na wyjście z domu:</label>
+                <div class="input-with-unit">
+                    <input type="number" id="prep-time" min="0" max="120" value="5">
+                    <span class="unit">minut</span>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label>Minimalny kąt słońca (kiedy kończymy grę):</label>
+                <div class="sun-presets">
+                    <div class="preset-option active" data-angle="0" tabindex="0" role="button">
+                        <span class="preset-image-placeholder" data-preset="sunset">
+                            <span class="preset-emoji">🌅</span>
+                            <small>Obraz zachodu</small>
+                        </span>
+                        <span class="preset-label">Zachód słońca</span>
+                        <span class="preset-value">0°</span>
+                    </div>
+                    <div class="preset-option" data-angle="-6" tabindex="0" role="button">
+                        <span class="preset-image-placeholder" data-preset="civil">
+                            <span class="preset-emoji">🌆</span>
+                            <small>Obraz zmierzchu</small>
+                        </span>
+                        <span class="preset-label">Zmierzch cywilny</span>
+                        <span class="preset-value">-6°</span>
+                    </div>
+                    <div class="preset-option" data-angle="-12" tabindex="0" role="button">
+                        <span class="preset-image-placeholder" data-preset="nautical">
+                            <span class="preset-emoji">🌃</span>
+                            <small>Obraz nocy</small>
+                        </span>
+                        <span class="preset-label">Zmierzch żeglarski</span>
+                        <span class="preset-value">-12°</span>
+                    </div>
+                </div>
+                <div class="custom-angle">
+                    <label for="sun-angle">Własny kąt:</label>
+                    <div class="input-with-unit">
+                        <input type="number" id="sun-angle" min="-18" max="10" value="0" step="1">
+                        <span class="unit">°</span>
+                    </div>
+                    <small class="hint">0° = zachód, ujemne = po zachodzie</small>
+                </div>
+            </div>
+        </section>
+
+        <!-- SEKCJA 3: Czas dojazdu do pól -->
+        <section class="card" id="travel-section">
+            <h2>🚗 Czas dojazdu</h2>
+
+            <div class="transport-mode">
+                <label>Środek transportu:</label>
+                <div class="transport-buttons">
+                    <button class="transport-btn" data-mode="walk" title="Pieszo ~5 km/h">🚶</button>
+                    <button class="transport-btn" data-mode="bike" title="Rower ~15 km/h">🚴</button>
+                    <button class="transport-btn active" data-mode="car" title="Samochód ~35 km/h">🚗</button>
+                    <button class="transport-btn" data-mode="transit" title="Komunikacja ~12 km/h">🚌</button>
+                </div>
+            </div>
+
+            <div class="courses-travel">
+                <!-- Jaśkowa Dolina -->
+                <div class="course-travel-card" data-course="jaskowa">
+                    <h3>🌲 Jaśkowa Dolina</h3>
+                    <div class="travel-estimate">
+                        <span class="estimate-label">Szacunek:</span>
+                        <span class="estimate-value" id="estimate-jaskowa">-- min</span>
+                        <small class="estimate-note">(linia prosta × 1.3)</small>
+                    </div>
+                    <div class="travel-actions">
+                        <a href="#" id="nav-link-jaskowa" class="btn btn-small btn-secondary" target="_blank">
+                            📍 Sprawdź trasę
+                        </a>
+                    </div>
+                    <div class="travel-input">
+                        <label for="travel-jaskowa">Rzeczywisty czas:</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="travel-jaskowa" min="1" max="180" value="">
+                            <span class="unit">min</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ronalda Reagana -->
+                <div class="course-travel-card" data-course="reagana">
+                    <h3>🏞️ Ronalda Reagana</h3>
+                    <div class="travel-estimate">
+                        <span class="estimate-label">Szacunek:</span>
+                        <span class="estimate-value" id="estimate-reagana">-- min</span>
+                        <small class="estimate-note">(linia prosta × 1.3)</small>
+                    </div>
+                    <div class="travel-actions">
+                        <a href="#" id="nav-link-reagana" class="btn btn-small btn-secondary" target="_blank">
+                            📍 Sprawdź trasę
+                        </a>
+                    </div>
+                    <div class="travel-input">
+                        <label for="travel-reagana">Rzeczywisty czas:</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="travel-reagana" min="1" max="180" value="">
+                            <span class="unit">min</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Na Zboczu -->
+                <div class="course-travel-card" data-course="zbocze">
+                    <h3>⛰️ Na Zboczu</h3>
+                    <div class="travel-estimate">
+                        <span class="estimate-label">Szacunek:</span>
+                        <span class="estimate-value" id="estimate-zbocze">-- min</span>
+                        <small class="estimate-note">(linia prosta × 1.3)</small>
+                    </div>
+                    <div class="travel-actions">
+                        <a href="#" id="nav-link-zbocze" class="btn btn-small btn-secondary" target="_blank">
+                            📍 Sprawdź trasę
+                        </a>
+                    </div>
+                    <div class="travel-input">
+                        <label for="travel-zbocze">Rzeczywisty czas:</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="travel-zbocze" min="1" max="180" value="">
+                            <span class="unit">min</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p class="speed-info">
+                <strong>ℹ️ Jak liczone są szacunki:</strong> Odległość w linii prostej × 1.3 (współczynnik krętości) ÷ średnia prędkość.
+                Prędkości: 🚶 5 km/h | 🚴 15 km/h | 🚗 35 km/h | 🚌 12 km/h.
+                <em>Kliknij "Sprawdź trasę" by poznać rzeczywisty czas i wpisz go powyżej.</em>
+            </p>
+        </section>
+
+        <!-- SEKCJA 4: WYNIKI -->
+        <section class="card results-card" id="results-section">
+            <h2>🎯 Ile czasu zostało?</h2>
+            <p class="current-time">Teraz jest: <strong id="current-time">--:--</strong></p>
+
+            <div class="results-grid">
+                <!-- Jaśkowa Dolina -->
+                <div class="result-card" data-course="jaskowa">
+                    <h3>🌲 Jaśkowa Dolina</h3>
+                    <div class="result-sun-time">
+                        <span class="label">Słońce na
+                            <span class="sun-angle-display">0°</span>:</span>
+                        <span class="value" id="sun-time-jaskowa">--:--</span>
+                    </div>
+                    <div class="result-arrival">
+                        <span class="label">Przybędziesz o:</span>
+                        <span class="value" id="arrival-jaskowa">--:--</span>
+                    </div>
+                    <div class="result-playtime">
+                        <span class="playtime-value" id="playtime-jaskowa">--</span>
+                        <span class="playtime-label">czasu na grę</span>
+                    </div>
+                    <a href="#" id="navigate-jaskowa" class="btn btn-primary btn-navigate">
+                        🧭 Nawiguj
+                    </a>
+                </div>
+
+                <!-- Ronalda Reagana -->
+                <div class="result-card" data-course="reagana">
+                    <h3>🏞️ Ronalda Reagana</h3>
+                    <div class="result-sun-time">
+                        <span class="label">Słońce na <span class="sun-angle-display">0°</span>:</span>
+                        <span class="value" id="sun-time-reagana">--:--</span>
+                    </div>
+                    <div class="result-arrival">
+                        <span class="label">Przybędziesz o:</span>
+                        <span class="value" id="arrival-reagana">--:--</span>
+                    </div>
+                    <div class="result-playtime">
+                        <span class="playtime-value" id="playtime-reagana">--</span>
+                        <span class="playtime-label">czasu na grę</span>
+                    </div>
+                    <a href="#" id="navigate-reagana" class="btn btn-primary btn-navigate">
+                        🧭 Nawiguj
+                    </a>
+                </div>
+
+                <!-- Na Zboczu -->
+                <div class="result-card" data-course="zbocze">
+                    <h3>⛰️ Na Zboczu</h3>
+                    <div class="result-sun-time">
+                        <span class="label">Słońce na <span class="sun-angle-display">0°</span>:</span>
+                        <span class="value" id="sun-time-zbocze">--:--</span>
+                    </div>
+                    <div class="result-arrival">
+                        <span class="label">Przybędziesz o:</span>
+                        <span class="value" id="arrival-zbocze">--:--</span>
+                    </div>
+                    <div class="result-playtime">
+                        <span class="playtime-value" id="playtime-zbocze">--</span>
+                        <span class="playtime-label">czasu na grę</span>
+                    </div>
+                    <a href="#" id="navigate-zbocze" class="btn btn-primary btn-navigate">
+                        🧭 Nawiguj
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>Stworzone dla disc golferów z Gdańska 🥏</p>
+            <p class="links">
+                <a href="https://www.openstreetmap.org/#map=19/54.372664/18.590667" target="_blank">Jaśkowa Dolina</a> |
+                <a href="https://www.openstreetmap.org/#map=19/54.408414/18.616033" target="_blank">Ronalda Reagana</a> |
+                <a href="https://www.openstreetmap.org/#map=19/54.346376/18.608766" target="_blank">Na Zboczu</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,541 @@
+// ===== DISC GOLF COURSES =====
+const COURSES = {
+    jaskowa: {
+        name: "Jaśkowa Dolina",
+        lat: 54.372664,
+        lng: 18.590667,
+        icon: "🌲",
+        osmLink: "https://www.openstreetmap.org/#map=19/54.372664/18.590667"
+    },
+    reagana: {
+        name: "Ronalda Reagana",
+        lat: 54.408414,
+        lng: 18.616033,
+        icon: "🏞️",
+        osmLink: "https://www.openstreetmap.org/#map=19/54.408414/18.616033"
+    },
+    zbocze: {
+        name: "Na Zboczu",
+        lat: 54.346376,
+        lng: 18.608766,
+        icon: "⛰️",
+        osmLink: "https://www.openstreetmap.org/#map=19/54.346376/18.608766"
+    }
+};
+
+// ===== TRANSPORT SPEEDS (km/h) =====
+const TRANSPORT_SPEEDS = {
+    walk: 5,
+    bike: 15,
+    car: 35,
+    transit: 12
+};
+
+// ===== ROUTE FACTOR (multiply straight line distance) =====
+const ROUTE_FACTOR = 1.3;
+
+// ===== STATE =====
+let state = {
+    userLat: null,
+    userLng: null,
+    transportMode: 'car',
+    prepTime: 5,
+    sunAngle: 0,
+    travelTimes: {
+        jaskowa: null,
+        reagana: null,
+        zbocze: null
+    }
+};
+
+// ===== MAP =====
+let map;
+let userMarker;
+let courseMarkers = {};
+
+// ===== INITIALIZATION =====
+document.addEventListener('DOMContentLoaded', () => {
+    loadState();
+    initMap();
+    initEventListeners();
+    updateUI();
+    startClock();
+});
+
+// ===== LOCAL STORAGE =====
+function loadState() {
+    const saved = localStorage.getItem('discGolfState');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            state = { ...state, ...parsed };
+        } catch (e) {
+            console.error('Error loading state:', e);
+        }
+    }
+}
+
+function saveState() {
+    localStorage.setItem('discGolfState', JSON.stringify(state));
+}
+
+// ===== MAP INITIALIZATION =====
+function initMap() {
+    // Center on Gdańsk
+    const gdanskCenter = [54.372, 18.60];
+
+    map = L.map('map').setView(gdanskCenter, 12);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    // Add course markers
+    Object.entries(COURSES).forEach(([key, course]) => {
+        const marker = L.marker([course.lat, course.lng])
+            .addTo(map)
+            .bindPopup(`<strong>${course.icon} ${course.name}</strong><br><a href="${course.osmLink}" target="_blank">Otwórz w OSM</a>`);
+        courseMarkers[key] = marker;
+    });
+
+    // Add user marker if position saved
+    if (state.userLat && state.userLng) {
+        setUserMarker(state.userLat, state.userLng);
+    }
+
+    // Click on map to set location
+    map.on('click', (e) => {
+        setUserLocation(e.latlng.lat, e.latlng.lng);
+    });
+}
+
+function setUserMarker(lat, lng) {
+    if (userMarker) {
+        userMarker.setLatLng([lat, lng]);
+    } else {
+        userMarker = L.marker([lat, lng], {
+            icon: L.divIcon({
+                className: 'user-marker',
+                html: '📍',
+                iconSize: [30, 30],
+                iconAnchor: [15, 30]
+            })
+        }).addTo(map).bindPopup('Twoja lokalizacja');
+    }
+    map.setView([lat, lng], 13);
+}
+
+// ===== EVENT LISTENERS =====
+function initEventListeners() {
+    // Geolocation button
+    document.getElementById('geolocate-btn').addEventListener('click', geolocate);
+
+    // Transport buttons
+    document.querySelectorAll('.transport-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.transport-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            state.transportMode = btn.dataset.mode;
+            saveState();
+            updateEstimates();
+            calculateResults();
+        });
+    });
+
+    // Set active transport button from state
+    document.querySelectorAll('.transport-btn').forEach(btn => {
+        if (btn.dataset.mode === state.transportMode) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // Sun preset buttons
+    document.querySelectorAll('.preset-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.preset-option').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const angle = parseInt(btn.dataset.angle);
+            state.sunAngle = angle;
+            document.getElementById('sun-angle').value = angle;
+            saveState();
+            calculateResults();
+        });
+        // Keyboard support
+        btn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                btn.click();
+            }
+        });
+    });
+
+    // Custom sun angle input
+    const sunAngleInput = document.getElementById('sun-angle');
+    const sunAngleSlider = document.getElementById('sun-angle-slider');
+
+    sunAngleInput.addEventListener('input', (e) => {
+        const angle = parseInt(e.target.value) || 0;
+        state.sunAngle = angle;
+        // Update slider (clamped to slider range)
+        sunAngleSlider.value = Math.max(-12, Math.min(6, angle));
+        // Update preset buttons
+        document.querySelectorAll('.preset-option').forEach(btn => {
+            btn.classList.toggle('active', parseInt(btn.dataset.angle) === angle);
+        });
+        saveState();
+        calculateResults();
+    });
+
+    sunAngleSlider.addEventListener('input', (e) => {
+        const angle = parseInt(e.target.value);
+        state.sunAngle = angle;
+        sunAngleInput.value = angle;
+        // Update preset buttons
+        document.querySelectorAll('.preset-option').forEach(btn => {
+            btn.classList.toggle('active', parseInt(btn.dataset.angle) === angle);
+        });
+        saveState();
+        calculateResults();
+    });
+
+    // Prep time input and slider
+    const prepTimeInput = document.getElementById('prep-time');
+    const prepTimeSlider = document.getElementById('prep-time-slider');
+
+    prepTimeInput.addEventListener('input', (e) => {
+        const time = parseInt(e.target.value) || 0;
+        state.prepTime = time;
+        // Update slider (clamped to slider range)
+        prepTimeSlider.value = Math.max(0, Math.min(60, time));
+        saveState();
+        calculateResults();
+    });
+
+    prepTimeSlider.addEventListener('input', (e) => {
+        const time = parseInt(e.target.value);
+        state.prepTime = time;
+        prepTimeInput.value = time;
+        saveState();
+        calculateResults();
+    });
+
+    // Travel time inputs
+    Object.keys(COURSES).forEach(key => {
+        document.getElementById(`travel-${key}`).addEventListener('input', (e) => {
+            const val = e.target.value;
+            state.travelTimes[key] = val ? parseInt(val) : null;
+            saveState();
+            calculateResults();
+        });
+    });
+}
+
+// ===== GEOLOCATION =====
+function geolocate() {
+    const btn = document.getElementById('geolocate-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-icon">⏳</span> Lokalizuję...';
+
+    if (!navigator.geolocation) {
+        alert('Twoja przeglądarka nie obsługuje geolokalizacji.');
+        btn.disabled = false;
+        btn.innerHTML = '<span class="btn-icon">📍</span> Zlokalizuj mnie';
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            setUserLocation(pos.coords.latitude, pos.coords.longitude);
+            btn.disabled = false;
+            btn.innerHTML = '<span class="btn-icon">📍</span> Zlokalizuj mnie';
+        },
+        (err) => {
+            alert('Nie udało się uzyskać lokalizacji: ' + err.message);
+            btn.disabled = false;
+            btn.innerHTML = '<span class="btn-icon">📍</span> Zlokalizuj mnie';
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+    );
+}
+
+function setUserLocation(lat, lng) {
+    state.userLat = lat;
+    state.userLng = lng;
+    saveState();
+    setUserMarker(lat, lng);
+    updateLocationInfo();
+    updateEstimates();
+    updateNavLinks();
+    calculateResults();
+}
+
+function updateLocationInfo() {
+    const info = document.getElementById('location-info');
+    if (state.userLat && state.userLng) {
+        info.textContent = `Lokalizacja: ${state.userLat.toFixed(5)}, ${state.userLng.toFixed(5)}`;
+        info.classList.add('active');
+    } else {
+        info.textContent = 'Lokalizacja nie wybrana';
+        info.classList.remove('active');
+    }
+}
+
+// ===== DISTANCE & TRAVEL TIME =====
+function haversineDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371; // Earth radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+function estimateTravelTime(courseKey) {
+    if (!state.userLat || !state.userLng) return null;
+
+    const course = COURSES[courseKey];
+    const straightDistance = haversineDistance(state.userLat, state.userLng, course.lat, course.lng);
+    const routeDistance = straightDistance * ROUTE_FACTOR;
+    const speed = TRANSPORT_SPEEDS[state.transportMode];
+    const timeHours = routeDistance / speed;
+    const timeMinutes = Math.round(timeHours * 60);
+
+    return timeMinutes;
+}
+
+function updateEstimates() {
+    Object.keys(COURSES).forEach(key => {
+        const estimate = estimateTravelTime(key);
+        const estimateEl = document.getElementById(`estimate-${key}`);
+        const input = document.getElementById(`travel-${key}`);
+
+        if (estimate !== null) {
+            estimateEl.textContent = `${estimate} min`;
+            // Only update input if user hasn't set a custom value
+            if (state.travelTimes[key] === null) {
+                input.placeholder = estimate;
+            }
+        } else {
+            estimateEl.textContent = '-- min';
+            input.placeholder = '';
+        }
+    });
+}
+
+function getTravelTime(courseKey) {
+    // User override takes priority
+    if (state.travelTimes[courseKey] !== null) {
+        return state.travelTimes[courseKey];
+    }
+    // Otherwise use estimate
+    return estimateTravelTime(courseKey);
+}
+
+// ===== NAVIGATION LINKS =====
+function updateNavLinks() {
+    Object.keys(COURSES).forEach(key => {
+        const course = COURSES[key];
+        const link = document.getElementById(`nav-link-${key}`);
+
+        if (state.userLat && state.userLng) {
+            if (state.transportMode === 'transit') {
+                // jakdojade.pl link
+                link.href = `https://jakdojade.pl/gdansk/trasa/?fn=Moja%20lokalizacja&fc=${state.userLat}:${state.userLng}&tn=${encodeURIComponent(course.name)}&tc=${course.lat}:${course.lng}`;
+                link.textContent = '🚌 Sprawdź w jakdojade';
+            } else {
+                // Google Maps directions
+                const modeMap = { walk: 'walking', bike: 'bicycling', car: 'driving' };
+                const mode = modeMap[state.transportMode] || 'driving';
+                link.href = `https://www.google.com/maps/dir/?api=1&origin=${state.userLat},${state.userLng}&destination=${course.lat},${course.lng}&travelmode=${mode}`;
+                link.textContent = '📍 Sprawdź trasę';
+            }
+        } else {
+            link.href = course.osmLink;
+            link.textContent = '📍 Zobacz na mapie';
+        }
+    });
+
+    // Update navigate buttons in results
+    Object.keys(COURSES).forEach(key => {
+        const course = COURSES[key];
+        const navBtn = document.getElementById(`navigate-${key}`);
+
+        if (state.userLat && state.userLng) {
+            // Use geo: URI for mobile navigation apps
+            navBtn.href = `geo:${course.lat},${course.lng}?q=${course.lat},${course.lng}(${encodeURIComponent(course.name)})`;
+        } else {
+            navBtn.href = course.osmLink;
+        }
+    });
+}
+
+// ===== SUN CALCULATIONS =====
+function getSunTimeForAngle(lat, lng, targetAngle) {
+    const today = new Date();
+    const times = SunCalc.getTimes(today, lat, lng);
+
+    // For angle 0 (sunset)
+    if (targetAngle === 0) {
+        return times.sunset;
+    }
+
+    // For negative angles (after sunset)
+    // SunCalc provides specific twilight times
+    if (targetAngle === -6) {
+        return times.dusk; // Civil twilight end
+    }
+    if (targetAngle === -12) {
+        return times.nauticalDusk; // Nautical twilight end
+    }
+    if (targetAngle === -18) {
+        return times.night; // Astronomical twilight end
+    }
+
+    // For custom angles, interpolate
+    if (targetAngle < 0 && targetAngle > -6) {
+        // Between sunset and civil dusk
+        const sunsetTime = times.sunset.getTime();
+        const duskTime = times.dusk.getTime();
+        const ratio = targetAngle / -6;
+        return new Date(sunsetTime + (duskTime - sunsetTime) * ratio);
+    }
+    if (targetAngle <= -6 && targetAngle > -12) {
+        // Between civil and nautical dusk
+        const duskTime = times.dusk.getTime();
+        const nauticalTime = times.nauticalDusk.getTime();
+        const ratio = (targetAngle + 6) / -6;
+        return new Date(duskTime + (nauticalTime - duskTime) * ratio);
+    }
+    if (targetAngle <= -12 && targetAngle > -18) {
+        // Between nautical and astronomical dusk
+        const nauticalTime = times.nauticalDusk.getTime();
+        const nightTime = times.night.getTime();
+        const ratio = (targetAngle + 12) / -6;
+        return new Date(nauticalTime + (nightTime - nauticalTime) * ratio);
+    }
+
+    // For positive angles (before sunset), use golden hour as reference
+    if (targetAngle > 0) {
+        const goldenHour = times.goldenHour.getTime();
+        const sunsetTime = times.sunset.getTime();
+        // Rough estimate: golden hour is ~6° above horizon
+        const ratio = 1 - (targetAngle / 6);
+        return new Date(goldenHour + (sunsetTime - goldenHour) * ratio);
+    }
+
+    return times.sunset;
+}
+
+// ===== RESULTS CALCULATION =====
+function calculateResults() {
+    const now = new Date();
+
+    Object.keys(COURSES).forEach(key => {
+        const course = COURSES[key];
+        const travelTime = getTravelTime(key);
+
+        // Get sun time for this course's location
+        const sunTime = getSunTimeForAngle(course.lat, course.lng, state.sunAngle);
+
+        // Update sun time display
+        const sunTimeEl = document.getElementById(`sun-time-${key}`);
+        sunTimeEl.textContent = formatTime(sunTime);
+
+        // Update sun angle displays
+        document.querySelectorAll('.sun-angle-display').forEach(el => {
+            el.textContent = `${state.sunAngle}°`;
+        });
+
+        // Calculate arrival time
+        const arrivalEl = document.getElementById(`arrival-${key}`);
+        const playtimeEl = document.getElementById(`playtime-${key}`);
+        const resultCard = document.querySelector(`.result-card[data-course="${key}"]`);
+
+        if (travelTime === null) {
+            arrivalEl.textContent = '--:--';
+            playtimeEl.textContent = 'Wybierz lokalizację';
+            playtimeEl.classList.remove('late');
+            return;
+        }
+
+        const totalTravelMinutes = state.prepTime + travelTime;
+        const arrivalTime = new Date(now.getTime() + totalTravelMinutes * 60 * 1000);
+        arrivalEl.textContent = formatTime(arrivalTime);
+
+        // Calculate playtime
+        const playtimeMs = sunTime.getTime() - arrivalTime.getTime();
+        const playtimeMinutes = Math.round(playtimeMs / 60000);
+
+        if (playtimeMinutes > 0) {
+            playtimeEl.textContent = formatDuration(playtimeMinutes);
+            playtimeEl.classList.remove('late');
+        } else {
+            playtimeEl.textContent = `Spóźnienie o ${formatDuration(Math.abs(playtimeMinutes))}`;
+            playtimeEl.classList.add('late');
+        }
+    });
+}
+
+// ===== FORMATTING =====
+function formatTime(date) {
+    if (!date || isNaN(date.getTime())) return '--:--';
+    return date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDuration(minutes) {
+    if (minutes < 60) {
+        return `${minutes} min`;
+    }
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (mins === 0) {
+        return `${hours} godz.`;
+    }
+    return `${hours} godz. ${mins} min`;
+}
+
+// ===== CLOCK =====
+function startClock() {
+    function updateClock() {
+        const now = new Date();
+        document.getElementById('current-time').textContent = formatTime(now);
+        calculateResults();
+    }
+
+    updateClock();
+    setInterval(updateClock, 30000); // Update every 30 seconds
+}
+
+// ===== UI UPDATE =====
+function updateUI() {
+    // Set saved values to inputs and sliders
+    document.getElementById('prep-time').value = state.prepTime;
+    document.getElementById('prep-time-slider').value = Math.max(0, Math.min(60, state.prepTime));
+
+    document.getElementById('sun-angle').value = state.sunAngle;
+    document.getElementById('sun-angle-slider').value = Math.max(-18, Math.min(15, state.sunAngle));
+
+    // Set active sun preset
+    document.querySelectorAll('.preset-option').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.angle) === state.sunAngle);
+    });
+
+    // Set travel time inputs
+    Object.keys(COURSES).forEach(key => {
+        const input = document.getElementById(`travel-${key}`);
+        if (state.travelTimes[key] !== null) {
+            input.value = state.travelTimes[key];
+        }
+    });
+
+    // Update location info
+    updateLocationInfo();
+    updateEstimates();
+    updateNavLinks();
+    calculateResults();
+}
+
