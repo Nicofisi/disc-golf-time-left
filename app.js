@@ -117,8 +117,8 @@ function setUserMarker(lat, lng) {
             icon: L.divIcon({
                 className: 'user-marker',
                 html: '📍',
-                iconSize: [30, 30],
-                iconAnchor: [15, 30]
+                iconSize: [40, 40],
+                iconAnchor: [20, 40]
             })
         }).addTo(map).bindPopup('Twoja lokalizacja');
     }
@@ -711,56 +711,74 @@ async function updateWeather(arrivalTimes) {
         targetTime = validArrivals.reduce((earliest, t) => t < earliest ? t : earliest);
     }
 
-    const weather = getWeatherForTime(weatherData, targetTime);
-    if (!weather) {
+    // Get weather for 3 consecutive hours
+    const hour1 = new Date(targetTime);
+    const hour2 = new Date(targetTime.getTime() + 60 * 60 * 1000);
+    const hour3 = new Date(targetTime.getTime() + 2 * 60 * 60 * 1000);
+
+    const weather1 = getWeatherForTime(weatherData, hour1);
+    const weather2 = getWeatherForTime(weatherData, hour2);
+    const weather3 = getWeatherForTime(weatherData, hour3);
+
+    if (!weather1) {
         weatherContent.innerHTML = '<p class="weather-loading">Brak danych pogodowych</p>';
         return;
     }
 
-    const weatherInfo = WEATHER_CODES[weather.code] || { icon: '❓', desc: 'Nieznana' };
+    const weathers = [weather1, weather2, weather3].filter(w => w !== null);
 
-    // Determine weather status and alerts
+    // Find worst conditions across all 3 hours for alerts
+    const maxPrecipitation = Math.max(...weathers.map(w => w.precipitation));
+    const maxGusts = Math.max(...weathers.map(w => parseFloat(w.gusts)));
+    const maxWind = Math.max(...weathers.map(w => parseFloat(w.wind)));
+    const minTemp = Math.min(...weathers.map(w => w.temp));
+    const maxTemp = Math.max(...weathers.map(w => w.temp));
+    const worstWeatherCode = weathers.reduce((worst, w) => {
+        const badCodes = [63, 65, 73, 75, 82, 95, 96, 99];
+        const warnCodes = [51, 53, 55, 61, 71, 80, 81];
+        if (badCodes.includes(w.code)) return w.code;
+        if (badCodes.includes(worst)) return worst;
+        if (warnCodes.includes(w.code)) return w.code;
+        return worst;
+    }, weathers[0].code);
+
+    // Determine weather status and alerts based on worst conditions
     let status = 'good';
     let alerts = [];
 
-    // Check for bad conditions
-    const badWeatherCodes = [63, 65, 73, 75, 82, 95, 96, 99]; // Heavy rain, snow, storms
-    const warningWeatherCodes = [51, 53, 55, 61, 71, 80, 81]; // Light rain, snow, showers
+    const badWeatherCodes = [63, 65, 73, 75, 82, 95, 96, 99];
+    const warningWeatherCodes = [51, 53, 55, 61, 71, 80, 81];
 
-    if (badWeatherCodes.includes(weather.code)) {
+    if (badWeatherCodes.includes(worstWeatherCode)) {
         status = 'bad';
-        alerts.push({ type: 'danger', text: `⚠️ ${weatherInfo.desc} - rozważ przełożenie gry!` });
-    } else if (warningWeatherCodes.includes(weather.code)) {
+        const worstInfo = WEATHER_CODES[worstWeatherCode] || { desc: 'Złe warunki' };
+        alerts.push({ type: 'danger', text: `⚠️ ${worstInfo.desc} - rozważ przełożenie gry!` });
+    } else if (warningWeatherCodes.includes(worstWeatherCode)) {
         status = 'warning';
-        alerts.push({ type: 'warning', text: `⚡ ${weatherInfo.desc} - weź kurtkę!` });
+        const worstInfo = WEATHER_CODES[worstWeatherCode] || { desc: 'Opady' };
+        alerts.push({ type: 'warning', text: `⚡ ${worstInfo.desc} - weź kurtkę!` });
     }
 
-    // Check precipitation probability
-    if (weather.precipitation >= 70) {
+    if (maxPrecipitation >= 70) {
         status = 'bad';
-        alerts.push({ type: 'danger', text: `🌧️ ${weather.precipitation}% szans na opady - będzie mokro!` });
-    } else if (weather.precipitation >= 40) {
+        alerts.push({ type: 'danger', text: `🌧️ ${maxPrecipitation}% szans na opady - będzie mokro!` });
+    } else if (maxPrecipitation >= 40) {
         if (status === 'good') status = 'warning';
-        alerts.push({ type: 'warning', text: `🌧️ ${weather.precipitation}% szans na opady - weź kurtkę` });
+        alerts.push({ type: 'warning', text: `🌧️ ${maxPrecipitation}% szans na opady - weź kurtkę` });
     }
 
-    // Check wind
-    const windMs = parseFloat(weather.wind);
-    const gustMs = parseFloat(weather.gusts);
-
-    if (gustMs >= 15) {
+    if (maxGusts >= 15) {
         status = 'bad';
-        alerts.push({ type: 'danger', text: `💨 Porywy ${weather.gusts} m/s - dyski będą latać!` });
-    } else if (windMs >= 8 || gustMs >= 10) {
+        alerts.push({ type: 'danger', text: `💨 Porywy do ${maxGusts.toFixed(1)} m/s - dyski będą latać!` });
+    } else if (maxWind >= 8 || maxGusts >= 10) {
         if (status === 'good') status = 'warning';
         alerts.push({ type: 'warning', text: `💨 Silny wiatr - wybierz stabilne dyski` });
     }
 
-    // Check temperature
-    if (weather.temp <= 0) {
+    if (minTemp <= 0) {
         if (status === 'good') status = 'warning';
         alerts.push({ type: 'warning', text: `🥶 Mróz! Ubierz się ciepło` });
-    } else if (weather.temp >= 30) {
+    } else if (maxTemp >= 30) {
         if (status === 'good') status = 'warning';
         alerts.push({ type: 'warning', text: `🥵 Upał! Weź dużo wody` });
     }
@@ -769,55 +787,36 @@ async function updateWeather(arrivalTimes) {
     weatherCard.classList.remove('weather-good', 'weather-warning', 'weather-bad');
     weatherCard.classList.add(`weather-${status}`);
 
-    // Build HTML
-    // Format the forecast hour (comes as "2026-01-11T21:00" format - local time)
-    // Extract just the hour part
-    const forecastTimeStr = weather.forecastHour.slice(11, 16); // "21:00"
+    // Build HTML for 3 columns
+    function buildWeatherColumn(weather, label) {
+        if (!weather) return '';
+        const info = WEATHER_CODES[weather.code] || { icon: '❓', desc: 'Nieznana' };
+        const timeStr = weather.forecastHour.slice(11, 16);
+        return `
+            <div class="weather-column">
+                <div class="weather-column-time">${timeStr}</div>
+                <div class="weather-column-icon">${info.icon}</div>
+                <div class="weather-column-temp">${weather.temp}°C</div>
+                <div class="weather-column-details">
+                    <span title="Średni wiatr">💨 ${weather.wind} m/s <small>wiatr</small></span>
+                    <span title="Porywy wiatru">🌬️ ${weather.gusts} m/s <small>porywy</small></span>
+                    <span title="Szansa na opady">🌧️ ${weather.precipitation}% <small>opady</small></span>
+                </div>
+            </div>
+        `;
+    }
 
     const alertsHtml = alerts.map(a =>
         `<div class="weather-alert alert-${a.type}">${a.text}</div>`
     ).join('');
 
     weatherContent.innerHTML = `
-        <div class="weather-grid">
-            <div class="weather-main-info">
-                <span class="weather-main-icon">${weatherInfo.icon}</span>
-                <span class="weather-main-temp">${weather.temp}°C</span>
-                <span class="weather-main-desc">${weatherInfo.desc}</span>
-            </div>
-            <div class="weather-details-grid">
-                <div class="weather-detail">
-                    <span class="weather-detail-icon">💨</span>
-                    <div>
-                        <div class="weather-detail-value">${weather.wind} m/s</div>
-                        <div class="weather-detail-label">wiatr</div>
-                    </div>
-                </div>
-                <div class="weather-detail">
-                    <span class="weather-detail-icon">🌬️</span>
-                    <div>
-                        <div class="weather-detail-value">${weather.gusts} m/s</div>
-                        <div class="weather-detail-label">porywy</div>
-                    </div>
-                </div>
-                <div class="weather-detail">
-                    <span class="weather-detail-icon">🌧️</span>
-                    <div>
-                        <div class="weather-detail-value">${weather.precipitation}%</div>
-                        <div class="weather-detail-label">szansa na opady</div>
-                    </div>
-                </div>
-                <div class="weather-detail">
-                    <span class="weather-detail-icon">☁️</span>
-                    <div>
-                        <div class="weather-detail-value">${weather.clouds}%</div>
-                        <div class="weather-detail-label">zachmurzenie</div>
-                    </div>
-                </div>
-            </div>
+        <div class="weather-columns">
+            ${buildWeatherColumn(weather1, 'Teraz')}
+            ${buildWeatherColumn(weather2, '+1h')}
+            ${buildWeatherColumn(weather3, '+2h')}
         </div>
         ${alertsHtml}
-        <p class="weather-time-note">Prognoza na godz. ${forecastTimeStr}</p>
     `;
 }
 
