@@ -160,6 +160,7 @@ function initEventListeners() {
             const angle = parseInt(btn.dataset.angle);
             state.sunAngle = angle;
             document.getElementById('sun-angle').value = angle;
+            document.getElementById('sun-angle-slider').value = Math.max(-12, Math.min(6, angle));
             saveState();
             calculateResults();
         });
