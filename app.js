@@ -5,21 +5,24 @@ const COURSES = {
         lat: 54.372664,
         lng: 18.590667,
         icon: "🌲",
-        osmLink: "https://www.openstreetmap.org/#map=19/54.372664/18.590667"
+        osmLink: "https://www.openstreetmap.org/#map=19/54.372664/18.590667",
+        googleMapsLink: "https://www.google.com/maps/place/Ja%C5%9Bkowa+Disc+Golf/@54.3737965,18.5906528,909m"
     },
     reagana: {
         name: "Ronalda Reagana",
         lat: 54.408414,
         lng: 18.616033,
         icon: "🏞️",
-        osmLink: "https://www.openstreetmap.org/#map=19/54.408414/18.616033"
+        osmLink: "https://www.openstreetmap.org/#map=19/54.408414/18.616033",
+        googleMapsLink: "https://www.google.com/maps/place/Disc+Golf+w+Park+im+R.+Reagana/@54.4085641,18.6112057,908m"
     },
     zbocze: {
         name: "Na Zboczu",
         lat: 54.346376,
         lng: 18.608766,
         icon: "⛰️",
-        osmLink: "https://www.openstreetmap.org/#map=19/54.346376/18.608766"
+        osmLink: "https://www.openstreetmap.org/#map=19/54.346376/18.608766",
+        googleMapsLink: "https://www.google.com/maps/place/Disc+Golf+Na+Zboczu/@54.3465253,18.6061842,910m"
     }
 };
 
@@ -380,8 +383,8 @@ function updateNavLinks() {
                 navBtn.href = `https://www.google.com/maps/dir/?api=1&origin=${state.userLat},${state.userLng}&destination=${course.lat},${course.lng}&travelmode=${mode}`;
             }
         } else {
-            // No user location - just show destination on Google Maps
-            navBtn.href = `https://www.google.com/maps/search/?api=1&query=${course.lat},${course.lng}`;
+            // No user location - show course on Google Maps
+            navBtn.href = course.googleMapsLink;
         }
         navBtn.target = '_blank';
     });
