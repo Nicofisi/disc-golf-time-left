@@ -366,12 +366,24 @@ function updateNavLinks() {
         const course = COURSES[key];
         const navBtn = document.getElementById(`navigate-${key}`);
 
+        // Detect if mobile device
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
         if (state.userLat && state.userLng) {
-            // Use geo: URI for mobile navigation apps
-            navBtn.href = `geo:${course.lat},${course.lng}?q=${course.lat},${course.lng}(${encodeURIComponent(course.name)})`;
+            if (isMobile) {
+                // Use geo: URI for mobile navigation apps
+                navBtn.href = `geo:${course.lat},${course.lng}?q=${course.lat},${course.lng}(${encodeURIComponent(course.name)})`;
+            } else {
+                // Use Google Maps directions for desktop
+                const modeMap = { walk: 'walking', bike: 'bicycling', car: 'driving', transit: 'transit' };
+                const mode = modeMap[state.transportMode] || 'driving';
+                navBtn.href = `https://www.google.com/maps/dir/?api=1&origin=${state.userLat},${state.userLng}&destination=${course.lat},${course.lng}&travelmode=${mode}`;
+            }
         } else {
-            navBtn.href = course.osmLink;
+            // No user location - just show destination on Google Maps
+            navBtn.href = `https://www.google.com/maps/search/?api=1&query=${course.lat},${course.lng}`;
         }
+        navBtn.target = '_blank';
     });
 }
 
