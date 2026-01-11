@@ -1,0 +1,17 @@
+{
+    "name": "Czy zdążę na disc golfa?",
+    "short_name": "Disc Golf",
+    "description": "Sprawdź ile czasu gry zostało przed zachodem słońca na polach disc golfowych w Gdańsku",
+    "start_url": "/disc-golf-time-left/",
+    "display": "standalone",
+    "background_color": "#f5f7fa",
+    "theme_color": "#2d7d46",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥏</text></svg>",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        }
+    ]
+}
+

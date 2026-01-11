@@ -37,6 +37,11 @@ const TRANSPORT_SPEEDS = {
 // ===== ROUTE FACTOR (multiply straight line distance) =====
 const ROUTE_FACTOR = 1.3;
 
+// ===== HELPERS =====
+function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
 // ===== STATE =====
 let state = {
     userLat: null,
@@ -369,11 +374,8 @@ function updateNavLinks() {
         const course = COURSES[key];
         const navBtn = document.getElementById(`navigate-${key}`);
 
-        // Detect if mobile device
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
         if (state.userLat && state.userLng) {
-            if (isMobile) {
+            if (isMobile()) {
                 // Use geo: URI for mobile navigation apps
                 navBtn.href = `geo:${course.lat},${course.lng}?q=${course.lat},${course.lng}(${encodeURIComponent(course.name)})`;
             } else {
@@ -804,7 +806,7 @@ async function updateWeather(arrivalTimes) {
     weatherCard.classList.add(`weather-${status}`);
 
     // Build HTML for 3 columns
-    function buildWeatherColumn(weather, label) {
+    function buildWeatherColumn(weather) {
         if (!weather) return '';
         const info = WEATHER_CODES[weather.code] || { icon: '❓', desc: 'Nieznana' };
         const timeStr = weather.forecastHour.slice(11, 16);
@@ -828,9 +830,9 @@ async function updateWeather(arrivalTimes) {
 
     weatherContent.innerHTML = `
         <div class="weather-columns">
-            ${buildWeatherColumn(weather1, 'Teraz')}
-            ${buildWeatherColumn(weather2, '+1h')}
-            ${buildWeatherColumn(weather3, '+2h')}
+            ${buildWeatherColumn(weather1)}
+            ${buildWeatherColumn(weather2)}
+            ${buildWeatherColumn(weather3)}
         </div>
         ${alertsHtml}
     `;

@@ -624,6 +624,12 @@ footer .links {
     margin-top: 0.5rem;
 }
 
+footer .attribution {
+    margin-top: 0.75rem;
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
 footer a {
     color: var(--primary);
     text-decoration: none;
