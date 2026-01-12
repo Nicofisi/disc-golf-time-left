@@ -831,7 +831,7 @@ async function updateWeather(arrivalTimes) {
 
     if (maxGusts >= 15) {
         if (status === 'good') status = 'warning';
-        alerts.push({ type: 'warning', text: `💨 Porywy do ${maxGusts.toFixed(1)} m/s - dyski będą mocno lecieć!` });
+        alerts.push({ type: 'warning', text: `💨 Porywy do ${maxGusts.toFixed(1)} m/s - wiatr będzie mocno wpływać na lot dysków` });
     } else if (maxWind >= 8 || maxGusts >= 10) {
         if (status === 'good') status = 'warning';
         alerts.push({ type: 'warning', text: `💨 Wiatr - wybierz stabilniejsze dyski` });
@@ -839,7 +839,7 @@ async function updateWeather(arrivalTimes) {
 
     if (minTemp <= 0) {
         if (status === 'good') status = 'warning';
-        alerts.push({ type: 'warning', text: `🥶 Mróz - ubierz się ciepło, rozgrzej dyski` });
+        alerts.push({ type: 'warning', text: `🥶 Mróz - ubierz się ciepło i weź rękawiczki` });
     } else if (maxTemp >= 30) {
         if (status === 'good') status = 'warning';
         alerts.push({ type: 'warning', text: `🥵 Upał - weź dużo wody, szukaj cienia` });
