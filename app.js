@@ -512,12 +512,16 @@ function calculateResults() {
         const course = COURSES[key];
         const travelTime = getTravelTime(key);
 
-        // Get sun time for this course's location
-        const sunTime = getSunTimeForAngle(course.lat, course.lng, state.sunAngle);
+        // Get sun times for today
+        const sunsetTime = getSunTimeForAngle(course.lat, course.lng, state.sunAngle);
+        const sunriseTime = getSunriseTimeForAngle(course.lat, course.lng, state.sunAngle);
 
-        // Update sun time display
+        // Check if we're before sunrise (night time)
+        const isBeforeSunrise = now < sunriseTime;
+
+        // Update sun time display - show sunset time
         const sunTimeEl = document.getElementById(`sun-time-${key}`);
-        sunTimeEl.textContent = formatTime(sunTime);
+        sunTimeEl.textContent = formatTime(sunsetTime);
 
         // Update sun angle displays
         document.querySelectorAll('.sun-angle-display').forEach(el => {
@@ -532,30 +536,61 @@ function calculateResults() {
         if (travelTime === null) {
             arrivalEl.textContent = '--:--';
             playtimeEl.innerHTML = 'Wybierz lokalizację';
-            playtimeEl.classList.remove('late');
+            playtimeEl.classList.remove('late', 'night');
             if (nextDayEl) nextDayEl.style.display = 'none';
             arrivalTimes[key] = null;
             return;
         }
 
         const totalTravelMinutes = state.prepTime + travelTime;
+
+        // SCENARIO: It's night (before sunrise)
+        if (isBeforeSunrise) {
+            // Calculate when to leave to arrive at sunrise
+            const leaveTime = new Date(sunriseTime.getTime() - totalTravelMinutes * 60 * 1000);
+
+            // Calculate play window (sunrise to sunset)
+            const playWindowMinutes = Math.round((sunsetTime.getTime() - sunriseTime.getTime()) / 60000);
+
+            arrivalEl.textContent = formatTime(sunriseTime);
+            playtimeEl.innerHTML = `${formatDuration(playWindowMinutes)}`;
+            playtimeEl.classList.remove('late');
+            playtimeEl.classList.add('night');
+            playtimeEl.nextElementSibling.style.display = ''; // Show "czasu na grę"
+
+            if (nextDayEl) {
+                nextDayEl.innerHTML = `🌅 Wyjdź o <strong>${formatTime(leaveTime)}</strong> żeby być na miejscu o wschodzie`;
+                nextDayEl.style.display = 'block';
+                nextDayEl.classList.add('night-info');
+            }
+
+            // For weather, use sunrise time as arrival
+            arrivalTimes[key] = sunriseTime;
+            return;
+        }
+
+        // SCENARIO: Normal day - calculate if we can make it before sunset
         const arrivalTime = new Date(now.getTime() + totalTravelMinutes * 60 * 1000);
         arrivalEl.textContent = formatTime(arrivalTime);
         arrivalTimes[key] = arrivalTime;
 
         // Calculate playtime
-        const playtimeMs = sunTime.getTime() - arrivalTime.getTime();
+        const playtimeMs = sunsetTime.getTime() - arrivalTime.getTime();
         const playtimeMinutes = Math.round(playtimeMs / 60000);
 
         if (playtimeMinutes > 0) {
             playtimeEl.innerHTML = formatDuration(playtimeMinutes);
-            playtimeEl.classList.remove('late');
+            playtimeEl.classList.remove('late', 'night');
             // Show "czasu na grę" label
             playtimeEl.nextElementSibling.style.display = '';
-            if (nextDayEl) nextDayEl.style.display = 'none';
+            if (nextDayEl) {
+                nextDayEl.style.display = 'none';
+                nextDayEl.classList.remove('night-info');
+            }
         } else {
             playtimeEl.innerHTML = `Za późno!<br><small>o ${formatDuration(Math.abs(playtimeMinutes))}</small>`;
             playtimeEl.classList.add('late');
+            playtimeEl.classList.remove('night');
             // Hide "czasu na grę" label - doesn't make sense here
             playtimeEl.nextElementSibling.style.display = 'none';
 
@@ -571,6 +606,7 @@ function calculateResults() {
 
                 nextDayEl.innerHTML = `🌅 Jutro od <strong>${formatTime(tomorrowSunrise)}</strong> (${formatDuration(tomorrowPlayMinutes)} gry)`;
                 nextDayEl.style.display = 'block';
+                nextDayEl.classList.remove('night-info');
             }
         }
     });
@@ -751,12 +787,18 @@ async function updateWeather(arrivalTimes) {
     const maxWind = Math.max(...weathers.map(w => parseFloat(w.wind)));
     const minTemp = Math.min(...weathers.map(w => w.temp));
     const maxTemp = Math.max(...weathers.map(w => w.temp));
+
+    // Find worst weather code (storms > heavy precip > light precip > clear)
+    const stormCodes = [95, 96, 99];
+    const heavyPrecipCodes = [63, 65, 73, 75, 82];
+    const lightPrecipCodes = [51, 53, 55, 61, 71, 80, 81];
+
     const worstWeatherCode = weathers.reduce((worst, w) => {
-        const badCodes = [63, 65, 73, 75, 82, 95, 96, 99];
-        const warnCodes = [51, 53, 55, 61, 71, 80, 81];
-        if (badCodes.includes(w.code)) return w.code;
-        if (badCodes.includes(worst)) return worst;
-        if (warnCodes.includes(w.code)) return w.code;
+        if (stormCodes.includes(w.code)) return w.code;
+        if (stormCodes.includes(worst)) return worst;
+        if (heavyPrecipCodes.includes(w.code)) return w.code;
+        if (heavyPrecipCodes.includes(worst)) return worst;
+        if (lightPrecipCodes.includes(w.code)) return w.code;
         return worst;
     }, weathers[0].code);
 
@@ -764,41 +806,43 @@ async function updateWeather(arrivalTimes) {
     let status = 'good';
     let alerts = [];
 
-    const badWeatherCodes = [63, 65, 73, 75, 82, 95, 96, 99];
-    const warningWeatherCodes = [51, 53, 55, 61, 71, 80, 81];
 
-    if (badWeatherCodes.includes(worstWeatherCode)) {
+    if (stormCodes.includes(worstWeatherCode)) {
         status = 'bad';
-        const worstInfo = WEATHER_CODES[worstWeatherCode] || { desc: 'Złe warunki' };
-        alerts.push({ type: 'danger', text: `⚠️ ${worstInfo.desc} - rozważ przełożenie gry!` });
-    } else if (warningWeatherCodes.includes(worstWeatherCode)) {
+        const worstInfo = WEATHER_CODES[worstWeatherCode] || { desc: 'Burza' };
+        alerts.push({ type: 'danger', text: `⚠️ ${worstInfo.desc} - niebezpiecznie na otwartym terenie!` });
+    } else if (heavyPrecipCodes.includes(worstWeatherCode)) {
+        status = 'warning';
+        const worstInfo = WEATHER_CODES[worstWeatherCode] || { desc: 'Intensywne opady' };
+        alerts.push({ type: 'warning', text: `🌧️ ${worstInfo.desc} - weź wodoodporną kurtkę!` });
+    } else if (lightPrecipCodes.includes(worstWeatherCode)) {
         status = 'warning';
         const worstInfo = WEATHER_CODES[worstWeatherCode] || { desc: 'Opady' };
-        alerts.push({ type: 'warning', text: `⚡ ${worstInfo.desc} - weź kurtkę!` });
+        alerts.push({ type: 'warning', text: `🌧️ ${worstInfo.desc} - przydadzą się ręczniki na dyski` });
     }
 
     if (maxPrecipitation >= 70) {
-        status = 'bad';
-        alerts.push({ type: 'danger', text: `🌧️ ${maxPrecipitation}% szans na opady - będzie mokro!` });
+        if (status === 'good') status = 'warning';
+        alerts.push({ type: 'warning', text: `🌧️ ${maxPrecipitation}% szans na opady - weź wodoodporną torbę` });
     } else if (maxPrecipitation >= 40) {
         if (status === 'good') status = 'warning';
-        alerts.push({ type: 'warning', text: `🌧️ ${maxPrecipitation}% szans na opady - weź kurtkę` });
+        alerts.push({ type: 'warning', text: `🌧️ ${maxPrecipitation}% szans na opady - weź kurtkę na wszelki wypadek` });
     }
 
     if (maxGusts >= 15) {
-        status = 'bad';
-        alerts.push({ type: 'danger', text: `💨 Porywy do ${maxGusts.toFixed(1)} m/s - dyski będą latać!` });
+        if (status === 'good') status = 'warning';
+        alerts.push({ type: 'warning', text: `💨 Porywy do ${maxGusts.toFixed(1)} m/s - dyski będą mocno lecieć!` });
     } else if (maxWind >= 8 || maxGusts >= 10) {
         if (status === 'good') status = 'warning';
-        alerts.push({ type: 'warning', text: `💨 Silny wiatr - wybierz stabilne dyski` });
+        alerts.push({ type: 'warning', text: `💨 Wiatr - wybierz stabilniejsze dyski` });
     }
 
     if (minTemp <= 0) {
         if (status === 'good') status = 'warning';
-        alerts.push({ type: 'warning', text: `🥶 Mróz! Ubierz się ciepło` });
+        alerts.push({ type: 'warning', text: `🥶 Mróz - ubierz się ciepło, rozgrzej dyski` });
     } else if (maxTemp >= 30) {
         if (status === 'good') status = 'warning';
-        alerts.push({ type: 'warning', text: `🥵 Upał! Weź dużo wody` });
+        alerts.push({ type: 'warning', text: `🥵 Upał - weź dużo wody, szukaj cienia` });
     }
 
     // Update card class

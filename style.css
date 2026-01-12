@@ -484,6 +484,15 @@ header h1 {
     color: var(--danger);
 }
 
+.playtime-value.night {
+    color: var(--secondary);
+}
+
+.result-nextday.night-info {
+    background: rgba(90, 155, 212, 0.2);
+    color: var(--text);
+}
+
 .playtime-label {
     font-size: 0.85rem;
     color: var(--text-light);
