@@ -823,7 +823,7 @@ async function updateWeather(arrivalTimes) {
 
     if (maxPrecipitation >= 70) {
         if (status === 'good') status = 'warning';
-        alerts.push({ type: 'warning', text: `🌧️ ${maxPrecipitation}% szans na opady - weź wodoodporną torbę` });
+        alerts.push({ type: 'warning', text: `🌧️ ${maxPrecipitation}% szans na opady - ubierz się odpowiednio` });
     } else if (maxPrecipitation >= 40) {
         if (status === 'good') status = 'warning';
         alerts.push({ type: 'warning', text: `🌧️ ${maxPrecipitation}% szans na opady - weź kurtkę na wszelki wypadek` });
