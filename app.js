@@ -160,26 +160,8 @@ function initEventListeners() {
         }
     });
 
-    // Sun preset buttons
-    document.querySelectorAll('.preset-option').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.preset-option').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const angle = parseInt(btn.dataset.angle);
-            state.sunAngle = angle;
-            document.getElementById('sun-angle').value = angle;
-            document.getElementById('sun-angle-slider').value = Math.max(-12, Math.min(6, angle));
-            saveState();
-            calculateResults();
-        });
-        // Keyboard support
-        btn.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                btn.click();
-            }
-        });
-    });
+    // Initialize slider markers and photo gallery
+    initSunAngleSlider();
 
     // Custom sun angle input
     const sunAngleInput = document.getElementById('sun-angle');
@@ -190,10 +172,7 @@ function initEventListeners() {
         state.sunAngle = angle;
         // Update slider (clamped to slider range)
         sunAngleSlider.value = Math.max(-12, Math.min(6, angle));
-        // Update preset buttons
-        document.querySelectorAll('.preset-option').forEach(btn => {
-            btn.classList.toggle('active', parseInt(btn.dataset.angle) === angle);
-        });
+        updatePhotoGallery(angle);
         saveState();
         calculateResults();
     });
@@ -202,10 +181,32 @@ function initEventListeners() {
         const angle = parseInt(e.target.value);
         state.sunAngle = angle;
         sunAngleInput.value = angle;
-        // Update preset buttons
-        document.querySelectorAll('.preset-option').forEach(btn => {
-            btn.classList.toggle('active', parseInt(btn.dataset.angle) === angle);
-        });
+        updatePhotoGallery(angle);
+        saveState();
+        calculateResults();
+    });
+
+    // Arrow buttons for angle
+    document.getElementById('angle-left').addEventListener('click', () => {
+        const slider = document.getElementById('sun-angle-slider');
+        const input = document.getElementById('sun-angle');
+        const newAngle = Math.max(-12, state.sunAngle - 1);
+        state.sunAngle = newAngle;
+        slider.value = newAngle;
+        input.value = newAngle;
+        updatePhotoGallery(newAngle);
+        saveState();
+        calculateResults();
+    });
+
+    document.getElementById('angle-right').addEventListener('click', () => {
+        const slider = document.getElementById('sun-angle-slider');
+        const input = document.getElementById('sun-angle');
+        const newAngle = Math.min(6, state.sunAngle + 1);
+        state.sunAngle = newAngle;
+        slider.value = newAngle;
+        input.value = newAngle;
+        updatePhotoGallery(newAngle);
         saveState();
         calculateResults();
     });
@@ -240,6 +241,196 @@ function initEventListeners() {
             calculateResults();
         });
     });
+}
+
+// ===== SUN ANGLE PHOTOS =====
+// Photo data: prefix = 100 + angle (e.g., prefix 94 = angle -6, prefix 100 = angle 0)
+const SUN_PHOTOS = {
+    '-6': {
+        main: 'images/94-DJI_20260309181752_0200_D.webp',
+        alt: [
+            { path: 'images/a alt/94a-DJI_20260309181742_0199_D.webp', exposure: '1/5s' },
+            { path: 'images/b alt/94b-DJI_20260309181732_0198_D.webp', exposure: '1s' },
+            { path: 'images/c alt/94c-DJI_20260309181720_0197_D.webp', exposure: '2s' }
+        ]
+    },
+    '-5': {
+        main: 'images/95-DJI_20260309180906_0195_D.webp',
+        alt: [
+            { path: 'images/a alt/95a-DJI_20260309180857_0194_D.webp', exposure: '1/5s' },
+            { path: 'images/b alt/95b-DJI_20260309180936_0196_D.webp', exposure: '1s' }
+        ]
+    },
+    '-4': {
+        main: 'images/96-DJI_20260309180216_0193_D.webp',
+        alt: [
+            { path: 'images/a alt/96a-DJI_20260309180206_0192_D.webp', exposure: '1/5s' }
+        ]
+    },
+    '-3': {
+        main: 'images/97-DJI_20260309175522_0189_D.webp',
+        alt: [
+            { path: 'images/a alt/97a-DJI_20260309175531_0190_D.webp', exposure: '1/5s' }
+        ]
+    },
+    '-2': {
+        main: 'images/98-DJI_20260309175153_0187_D.webp',
+        alt: [
+            { path: 'images/a alt/98a-DJI_20260309175206_0188_D.webp', exposure: '1/5s' }
+        ]
+    },
+    '-1': {
+        main: 'images/99-DJI_20260309174450_0185_D.webp',
+        alt: [
+            { path: 'images/a alt/99a-DJI_20260309174459_0186_D.webp', exposure: '1/5s' }
+        ]
+    },
+    '0': {
+        main: 'images/100-DJI_20260309173756_0183_D.webp',
+        alt: [
+            { path: 'images/a alt/100a-DJI_20260309173809_0184_D.webp', exposure: '1/5s' }
+        ]
+    },
+    '1': {
+        main: 'images/101-DJI_20260309173049_0181_D.webp',
+        alt: [
+            { path: 'images/a alt/101a-DJI_20260309173059_0182_D.webp', exposure: '1/5s' }
+        ]
+    },
+    '2': {
+        main: 'images/102-DJI_20260309172412_0179_D.webp',
+        alt: [
+            { path: 'images/a alt/102a-DJI_20260309172422_0180_D.webp', exposure: '1/5s' }
+        ]
+    },
+    '3': {
+        main: 'images/103-DJI_20260309171658_0175_D.webp',
+        alt: [
+            { path: 'images/a alt/103a-DJI_20260309171604_0174_D.webp', exposure: '1/5s' }
+        ]
+    }
+};
+
+function preloadAllPhotos() {
+    // Pre-render all gallery panels into the DOM (hidden) so switching is instant
+    const gallery = document.getElementById('gallery-grid');
+    gallery.innerHTML = '';
+
+    // "No photos" panel for angles without photos
+    const noPhotosPanel = document.createElement('div');
+    noPhotosPanel.className = 'gallery-panel';
+    noPhotosPanel.dataset.angle = 'none';
+    noPhotosPanel.style.display = 'none';
+    noPhotosPanel.innerHTML = '<p class="gallery-no-photos">Brak zdjęć dla tego kąta słońca</p>';
+    gallery.appendChild(noPhotosPanel);
+
+    // Create a panel for each angle that has photos
+    Object.entries(SUN_PHOTOS).forEach(([angle, photoData]) => {
+        const panel = document.createElement('div');
+        panel.className = 'gallery-panel';
+        panel.dataset.angle = angle;
+        panel.style.display = 'none';
+
+        let html = `
+            <div class="gallery-item">
+                <img src="${photoData.main}" alt="Kąt ${angle}° - 1/30s" onclick="window.open('${photoData.main}', '_blank')">
+                <div class="gallery-item-info">1/30s</div>
+            </div>
+        `;
+
+        photoData.alt.forEach(altPhoto => {
+            html += `
+                <div class="gallery-item">
+                    <img src="${altPhoto.path}" alt="Kąt ${angle}° - ${altPhoto.exposure}" onclick="window.open('${altPhoto.path}', '_blank')">
+                    <div class="gallery-item-info">${altPhoto.exposure}</div>
+                </div>
+            `;
+        });
+
+        panel.innerHTML = html;
+        gallery.appendChild(panel);
+    });
+}
+
+let activeGalleryAngle = null;
+
+function initSunAngleSlider() {
+    const markersContainer = document.getElementById('slider-markers');
+    const slider = document.getElementById('sun-angle-slider');
+    const minAngle = parseInt(slider.min);
+    const maxAngle = parseInt(slider.max);
+    const range = maxAngle - minAngle;
+
+    // Pre-render all gallery panels
+    preloadAllPhotos();
+
+    // Create markers
+    markersContainer.innerHTML = '';
+    for (let angle = minAngle; angle <= maxAngle; angle++) {
+        const percentage = ((angle - minAngle) / range) * 100;
+        const marker = document.createElement('div');
+        marker.className = 'slider-marker';
+        marker.style.left = `${percentage}%`;
+
+        // Check if we have photos for this angle
+        if (SUN_PHOTOS[angle.toString()]) {
+            marker.classList.add('has-photo');
+            marker.title = `${angle}° - kliknij aby zobaczyć zdjęcia`;
+            marker.addEventListener('click', () => {
+                state.sunAngle = angle;
+                slider.value = angle;
+                document.getElementById('sun-angle').value = angle;
+                updatePhotoGallery(angle);
+                saveState();
+                calculateResults();
+            });
+        }
+
+        markersContainer.appendChild(marker);
+    }
+
+    // Initialize gallery with current angle
+    updatePhotoGallery(state.sunAngle);
+}
+
+function updatePhotoGallery(angle) {
+    const angleDisplay = document.getElementById('gallery-angle-display');
+    const infoText = document.getElementById('gallery-info');
+    const gallery = document.getElementById('gallery-grid');
+
+    angleDisplay.textContent = `${angle}°`;
+
+    const angleStr = angle.toString();
+    const hasPhotos = !!SUN_PHOTOS[angleStr];
+
+    // Hide previous panel, show new one
+    if (activeGalleryAngle !== angleStr) {
+        gallery.querySelectorAll('.gallery-panel').forEach(panel => {
+            panel.style.display = 'none';
+        });
+
+        if (hasPhotos) {
+            const target = gallery.querySelector(`.gallery-panel[data-angle="${angleStr}"]`);
+            if (target) target.style.display = '';
+        } else {
+            const noPhotos = gallery.querySelector('.gallery-panel[data-angle="none"]');
+            if (noPhotos) noPhotos.style.display = '';
+        }
+
+        activeGalleryAngle = angleStr;
+    }
+
+    // Info text
+    if (hasPhotos) {
+        const totalPhotos = 1 + SUN_PHOTOS[angleStr].alt.length;
+        if (totalPhotos === 1) {
+            infoText.textContent = 'Jedno zdjęcie z czasem naświetlania 1/30s, ISO 100';
+        } else {
+            infoText.textContent = `${totalPhotos} zdjęcia z różnymi czasami naświetlania (ISO 100). Dłuższy czas = jaśniejszy obraz.`;
+        }
+    } else {
+        infoText.textContent = '';
+    }
 }
 
 // ===== GEOLOCATION =====
@@ -891,10 +1082,8 @@ function updateUI() {
     document.getElementById('sun-angle').value = state.sunAngle;
     document.getElementById('sun-angle-slider').value = Math.max(-12, Math.min(6, state.sunAngle));
 
-    // Set active sun preset
-    document.querySelectorAll('.preset-option').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.dataset.angle) === state.sunAngle);
-    });
+    // Update photo gallery
+    updatePhotoGallery(state.sunAngle);
 
     // Set travel time inputs
     Object.keys(COURSES).forEach(key => {
